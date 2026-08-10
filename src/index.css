@@ -1,0 +1,86 @@
+:root {
+  --bg: #f3efe6;
+  --bg-deep: #e7e0d2;
+  --ink: #1c1914;
+  --muted: #5c564c;
+  --line: #cfc6b4;
+  --accent: #1f4d3a;
+  --accent-soft: #d7ebe1;
+  --warn: #8a2e1d;
+  --warn-soft: #f3d9d3;
+  --panel: #fffcf7;
+  --shadow: 0 18px 40px rgba(28, 25, 20, 0.08);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  line-height: 1.45;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, #dfece6 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, #efe6d4 0%, transparent 50%),
+    var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+.brand {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .app-shell {
+    display: block !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .catalog-panel,
+  .import-panel,
+  .order-panel.no-print-hide {
+    display: none !important;
+  }
+
+  .report-print {
+    display: block !important;
+    padding: 24px;
+  }
+}
+
+.print-only,
+.report-print {
+  display: none;
+}
