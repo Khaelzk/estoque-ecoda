@@ -3,6 +3,7 @@ import './App.css'
 
 const QTY_KEY = 'ecoda-order-qty'
 const MARKUP_KEY = 'ecoda-sell-multiplier'
+const REPORT_MODE_KEY = 'ecoda-report-mode'
 
 /** Multiplicadores de venda sobre o custo (ex.: 2.5 = custo R$10 vira venda R$25). */
 const SELL_MULTIPLIERS = [
@@ -54,6 +55,11 @@ function loadMultiplier() {
   return 2.5
 }
 
+function loadReportMode() {
+  const raw = localStorage.getItem(REPORT_MODE_KEY)
+  return raw === 'interno' ? 'interno' : 'loja'
+}
+
 export default function App() {
   const [catalog, setCatalog] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -64,8 +70,10 @@ export default function App() {
   const [availableOnly, setAvailableOnly] = useState(true)
   const [qtyMap, setQtyMap] = useState(loadQty)
   const [sellMultiplier, setSellMultiplier] = useState(loadMultiplier)
+  const [reportMode, setReportMode] = useState(loadReportMode)
   const [dragOver, setDragOver] = useState(false)
 
+  const includeProfit = reportMode === 'interno'
   const multiplierLabel =
     SELL_MULTIPLIERS.find((m) => m.value === sellMultiplier)?.label || `${sellMultiplier}×`
 
@@ -95,6 +103,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(MARKUP_KEY, String(sellMultiplier))
   }, [sellMultiplier])
+
+  useEffect(() => {
+    localStorage.setItem(REPORT_MODE_KEY, reportMode)
+  }, [reportMode])
 
   const categoryCounts = useMemo(() => {
     const list = (catalog?.products || []).filter((p) => (availableOnly ? p.available : true))
@@ -194,38 +206,52 @@ export default function App() {
   }
 
   function exportCsv() {
-    const rows = [
-      [
-        'codigo',
-        'modelo',
-        'quantidade',
-        'custo_unitario',
-        'custo_subtotal',
-        `venda_${sellMultiplier}x_unitario`,
-        `venda_${sellMultiplier}x_subtotal`,
-        'lucro',
-      ],
-      ...orderItems.map((i) => [
-        i.code,
-        i.name,
-        i.qty,
-        i.unit.toFixed(2).replace('.', ','),
-        i.subtotal.toFixed(2).replace('.', ','),
-        i.sellUnit.toFixed(2).replace('.', ','),
-        i.sellSubtotal.toFixed(2).replace('.', ','),
-        i.profit.toFixed(2).replace('.', ','),
-      ]),
-      [],
-      ['', '', '', '', 'CUSTO', '', costTotal.toFixed(2).replace('.', ',')],
-      ['', '', '', '', `VENDA ${multiplierLabel}`, '', sellTotal.toFixed(2).replace('.', ',')],
-      ['', '', '', '', 'LUCRO', '', profitTotal.toFixed(2).replace('.', ',')],
-    ]
+    const rows = includeProfit
+      ? [
+          [
+            'codigo',
+            'modelo',
+            'quantidade',
+            'custo_unitario',
+            'custo_subtotal',
+            `venda_${sellMultiplier}x_unitario`,
+            `venda_${sellMultiplier}x_subtotal`,
+            'lucro',
+          ],
+          ...orderItems.map((i) => [
+            i.code,
+            i.name,
+            i.qty,
+            i.unit.toFixed(2).replace('.', ','),
+            i.subtotal.toFixed(2).replace('.', ','),
+            i.sellUnit.toFixed(2).replace('.', ','),
+            i.sellSubtotal.toFixed(2).replace('.', ','),
+            i.profit.toFixed(2).replace('.', ','),
+          ]),
+          [],
+          ['', '', '', '', 'CUSTO', costTotal.toFixed(2).replace('.', ',')],
+          ['', '', '', '', `VENDA ${multiplierLabel}`, sellTotal.toFixed(2).replace('.', ',')],
+          ['', '', '', '', 'LUCRO', profitTotal.toFixed(2).replace('.', ',')],
+        ]
+      : [
+          ['codigo', 'modelo', 'quantidade', 'preco_unitario', 'subtotal'],
+          ...orderItems.map((i) => [
+            i.code,
+            i.name,
+            i.qty,
+            i.unit.toFixed(2).replace('.', ','),
+            i.subtotal.toFixed(2).replace('.', ','),
+          ]),
+          [],
+          ['', '', '', 'TOTAL', costTotal.toFixed(2).replace('.', ',')],
+        ]
+
     const csv = rows.map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\n')
     const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `pedido-ecoda-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `pedido-ecoda-${reportMode}-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -392,85 +418,116 @@ export default function App() {
             </section>
 
             <aside className="order-panel">
-              <h2>Pedido</h2>
+              <div className="order-panel-top">
+                <h2>Pedido</h2>
 
-              <div className="markup-box">
-                <p className="markup-label">Preço de venda (multiplicador do custo)</p>
-                <div className="markup-options">
-                  {SELL_MULTIPLIERS.map((m) => (
-                    <button
-                      key={m.value}
-                      type="button"
-                      className={`markup-chip ${sellMultiplier === m.value ? 'active' : ''}`}
-                      onClick={() => setSellMultiplier(m.value)}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="markup-help">
-                  Ex.: custo R$ 10 → venda {formatBRL(10 * sellMultiplier)} · lucro {formatBRL(10 * sellMultiplier - 10)}
-                </p>
-              </div>
-
-              {orderItems.length === 0 ? (
-                <p className="muted">Escolha quantidades no catálogo.</p>
-              ) : (
-                <ul className="order-list">
-                  {orderItems.map((item) => (
-                    <li key={item.code}>
-                      <div>
-                        <strong>{item.code}</strong>
-                        <span>{item.name}</span>
-                      </div>
-                      <div className="order-nums">
-                        <span>
-                          {item.qty} × {formatBRL(item.unit)}
-                        </span>
-                        <strong>{formatBRL(item.subtotal)}</strong>
-                      </div>
-                      <div className="order-sell">
-                        <span>venda {multiplierLabel}</span>
-                        <strong>{formatBRL(item.sellSubtotal)}</strong>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="totals-box">
-                <div>
-                  <span>Custo (compra)</span>
-                  <strong>{formatBRL(costTotal)}</strong>
-                </div>
-                <div>
-                  <span>Venda {multiplierLabel}</span>
-                  <strong>{formatBRL(sellTotal)}</strong>
-                </div>
-                <div className={`profit-row ${profitTotal >= 0 ? 'gain' : 'loss'}`}>
-                  <span>Lucro se vender tudo</span>
-                  <strong>
-                    {profitTotal >= 0 ? '+' : ''}
-                    {formatBRL(profitTotal)}
-                  </strong>
+                <div className="markup-box">
+                  <p className="markup-label">Preço de venda (multiplicador do custo)</p>
+                  <div className="markup-options">
+                    {SELL_MULTIPLIERS.map((m) => (
+                      <button
+                        key={m.value}
+                        type="button"
+                        className={`markup-chip ${sellMultiplier === m.value ? 'active' : ''}`}
+                        onClick={() => setSellMultiplier(m.value)}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="markup-help">
+                    Ex.: custo R$ 10 → venda {formatBRL(10 * sellMultiplier)} · lucro {formatBRL(10 * sellMultiplier - 10)}
+                  </p>
                 </div>
               </div>
 
-              <div className="order-actions">
-                <button type="button" className="primary" disabled={!orderItems.length} onClick={() => window.print()}>
-                  Imprimir relatório
-                </button>
-                <button type="button" disabled={!orderItems.length} onClick={exportCsv}>
-                  Exportar CSV
-                </button>
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={!orderItems.length}
-                  onClick={() => setQtyMap({})}
-                >
-                  Limpar pedido
-                </button>
+              <div className="order-panel-scroll">
+                {orderItems.length === 0 ? (
+                  <p className="muted">Escolha quantidades no catálogo.</p>
+                ) : (
+                  <ul className="order-list">
+                    {orderItems.map((item) => (
+                      <li key={item.code}>
+                        <div>
+                          <strong>{item.code}</strong>
+                          <span>{item.name}</span>
+                        </div>
+                        <div className="order-nums">
+                          <span>
+                            {item.qty} × {formatBRL(item.unit)}
+                          </span>
+                          <strong>{formatBRL(item.subtotal)}</strong>
+                        </div>
+                        <div className="order-sell">
+                          <span>venda {multiplierLabel}</span>
+                          <strong>{formatBRL(item.sellSubtotal)}</strong>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="order-panel-footer">
+                <div className="totals-box">
+                  <div>
+                    <span>Custo (compra)</span>
+                    <strong>{formatBRL(costTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Venda {multiplierLabel}</span>
+                    <strong>{formatBRL(sellTotal)}</strong>
+                  </div>
+                  <div className={`profit-row ${profitTotal >= 0 ? 'gain' : 'loss'}`}>
+                    <span>Lucro se vender tudo</span>
+                    <strong>
+                      {profitTotal >= 0 ? '+' : ''}
+                      {formatBRL(profitTotal)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="order-actions">
+                  <div className="report-mode">
+                    <p className="markup-label">Relatório</p>
+                    <div className="markup-options">
+                      <button
+                        type="button"
+                        className={`markup-chip ${reportMode === 'loja' ? 'active' : ''}`}
+                        onClick={() => setReportMode('loja')}
+                      >
+                        Loja
+                      </button>
+                      <button
+                        type="button"
+                        className={`markup-chip ${reportMode === 'interno' ? 'active' : ''}`}
+                        onClick={() => setReportMode('interno')}
+                      >
+                        Interno
+                      </button>
+                    </div>
+                    <p className="markup-help">
+                      {includeProfit
+                        ? 'Inclui venda e lucro (só para você)'
+                        : 'Só itens e preços de compra (para a loja)'}
+                    </p>
+                  </div>
+
+                  <button type="button" className="primary" disabled={!orderItems.length} onClick={() => window.print()}>
+                    Imprimir relatório
+                  </button>
+                  <button type="button" disabled={!orderItems.length} onClick={exportCsv}>
+                    Exportar CSV
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={!orderItems.length}
+                    onClick={() => setQtyMap({})}
+                  >
+                    Limpar pedido
+                  </button>
+                </div>
               </div>
             </aside>
           </div>
@@ -482,40 +539,71 @@ export default function App() {
         <p>
           Data: {new Date().toLocaleString('pt-BR')}
           {catalog?.source ? ` · Fonte: ${catalog.source}` : ''}
-          {` · Venda a ${multiplierLabel} do custo`}
+          {includeProfit ? ` · Relatório interno · Venda a ${multiplierLabel}` : ' · Pedido para loja'}
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Código</th>
-              <th>Modelo</th>
-              <th>Qtd</th>
-              <th>Custo</th>
-              <th>Venda {multiplierLabel}</th>
-              <th>Lucro</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orderItems.map((item) => (
-              <tr key={item.code}>
-                <td>{item.code}</td>
-                <td>{item.name}</td>
-                <td>{item.qty}</td>
-                <td>{formatBRL(item.subtotal)}</td>
-                <td>{formatBRL(item.sellSubtotal)}</td>
-                <td>{formatBRL(item.profit)}</td>
+        {includeProfit ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Modelo</th>
+                <th>Qtd</th>
+                <th>Custo</th>
+                <th>Venda {multiplierLabel}</th>
+                <th>Lucro</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={3}>Totais</td>
-              <td>{formatBRL(costTotal)}</td>
-              <td>{formatBRL(sellTotal)}</td>
-              <td>{formatBRL(profitTotal)}</td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {orderItems.map((item) => (
+                <tr key={item.code}>
+                  <td>{item.code}</td>
+                  <td>{item.name}</td>
+                  <td>{item.qty}</td>
+                  <td>{formatBRL(item.subtotal)}</td>
+                  <td>{formatBRL(item.sellSubtotal)}</td>
+                  <td>{formatBRL(item.profit)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}>Totais</td>
+                <td>{formatBRL(costTotal)}</td>
+                <td>{formatBRL(sellTotal)}</td>
+                <td>{formatBRL(profitTotal)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Modelo</th>
+                <th>Qtd</th>
+                <th>Unitário</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderItems.map((item) => (
+                <tr key={item.code}>
+                  <td>{item.code}</td>
+                  <td>{item.name}</td>
+                  <td>{item.qty}</td>
+                  <td>{formatBRL(item.unit)}</td>
+                  <td>{formatBRL(item.subtotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4}>Total</td>
+                <td>{formatBRL(costTotal)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
       </div>
     </>
   )
