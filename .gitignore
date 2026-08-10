@@ -8,3 +8,6 @@ dist/
 # local runtime
 uploads/
 *.pdf
+
+__pycache__/
+*.pyc
